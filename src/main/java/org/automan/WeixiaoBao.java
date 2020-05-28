@@ -13,7 +13,7 @@ import org.openqa.selenium.phantomjs.PhantomJSDriver;
  */
 public class WeixiaoBao {
 
-    public static void loginWxb(String userName, String password) {
+    public static String loginWxbGetCookie(String userName, String password) {
         WebDriver driver = null;
         try {
             WebDriverManager.phantomjs().useMirror().forceCache().setup();
@@ -36,8 +36,7 @@ public class WeixiaoBao {
             for (Cookie cookie : cookies) {
                 cookieStr.append(cookie.getName()).append("=").append(cookie.getValue()).append(";").append(" ");
             }
-            String cookie = cookieStr.substring(0, cookieStr.lastIndexOf(";"));
-            System.out.println("登录成功，获得cookie" + cookie);
+            return cookieStr.substring(0, cookieStr.lastIndexOf(";"));
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
@@ -45,5 +44,6 @@ public class WeixiaoBao {
                 driver.quit();
             }
         }
+        return null;
     }
 }
