@@ -4,17 +4,18 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Set;
 import org.apache.commons.compress.utils.Lists;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.automan.model.WxbArticle;
 import org.openqa.selenium.By;
@@ -67,46 +68,44 @@ public class WeixiaoBao {
      */
     // TODO: 2020/5/29
 
-    public void postOneArticle(WxbArticle wxbArticle, Integer authorizerId, String cookie)
-        throws InterruptedException, IOException, URISyntaxException {
-        List<WxbArticle> wxbArticles = Lists.newArrayList();
-        wxbArticles.add(wxbArticle);
+    public void postArticle(List<WxbArticle> wxbArticles, Integer authorizerId, String cookie)
+        throws InterruptedException, IOException {
         String article = JSON.toJSONString(wxbArticles);
         postArticle(article, authorizerId, cookie);
     }
 
     private void postArticle(String article, Integer authorizerId, String cookie)
-        throws URISyntaxException, IOException, InterruptedException {
-        URIBuilder uriBuilder = new URIBuilder("https://www.wxb.com/resarticle/updateNews");
-        uriBuilder.addParameter("article", article);
-        uriBuilder.addParameter("authorizer_id", authorizerId.toString());
-        uriBuilder.addParameter("newsId", "0");
-        HttpPost post = new HttpPost(uriBuilder.build());
+        throws IOException, InterruptedException {
+        HttpPost post = new HttpPost("https://www.wxb.com/resarticle/updateNews");
         addHeader(post, cookie);
-        HttpResponse response = executeRequest(post);
-        String responseJSON = EntityUtils.toString(response.getEntity());
+        List<NameValuePair> nameValuePairs = Lists.newArrayList();
+        nameValuePairs.add(new BasicNameValuePair("article", article));
+        nameValuePairs.add(new BasicNameValuePair("authorizer_id", authorizerId.toString()));
+        nameValuePairs.add(new BasicNameValuePair("newsId", "0"));
+        post.setEntity(new UrlEncodedFormEntity(nameValuePairs, "UTF-8"));
+        String responseJSON = executeRequest(post);
         System.out.println("发送文章到微小宝，结果：" + responseJSON);
         JSONObject jsonObject = JSONObject.parseObject(responseJSON);
         if (jsonObject.getInteger("errcode") != 0) {
-            System.out.println("发送文章到微小宝，结果：" + responseJSON);
+            System.out.println("发送文章到微小宝失败");
             return;
         }
         String newsId = jsonObject.getString("newsId");
         System.out.println("发送文章到微小宝成功，newsId:" + newsId + "，开始同步文章到微信公众平台");
         Thread.sleep(2000);
-
+        synchronizeToWxMp(cookie, newsId, authorizerId);
     }
 
     private void synchronizeToWxMp(String cookie, String newsId, Integer authorizerId)
-        throws URISyntaxException, IOException {
-        URIBuilder uriBuilder = new URIBuilder("https://www.wxb.com/resarticle/synchronize");
-        uriBuilder.addParameter("type", "sync");
-        uriBuilder.addParameter("newsId", newsId);
-        uriBuilder.addParameter("authorizerIds[]", authorizerId.toString());
-        HttpPost post = new HttpPost(uriBuilder.build());
+        throws IOException {
+        HttpPost post = new HttpPost("https://www.wxb.com/resarticle/synchronize");
         addHeader(post, cookie);
-        HttpResponse response = executeRequest(post);
-        String responseJSON = EntityUtils.toString(response.getEntity());
+        List<NameValuePair> nameValuePairs = Lists.newArrayList();
+        nameValuePairs.add(new BasicNameValuePair("type", "sync"));
+        nameValuePairs.add(new BasicNameValuePair("newsId", newsId));
+        nameValuePairs.add(new BasicNameValuePair("authorizerIds[]", authorizerId.toString()));
+        post.setEntity(new UrlEncodedFormEntity(nameValuePairs, "UTF-8"));
+        String responseJSON = executeRequest(post);
         System.out.println("同步文章到微信公众平台，结果：" + responseJSON);
         JSONObject respObj = JSONObject.parseObject(responseJSON);
         if (respObj.getInteger("errcode") != 0) {
@@ -126,7 +125,7 @@ public class WeixiaoBao {
         requestBase.addHeader("cookie", cookie);
     }
 
-    private HttpResponse executeRequest(HttpRequestBase requestBase) {
+    private String executeRequest(HttpRequestBase requestBase) {
         CloseableHttpClient httpClient = HttpClientBuilder.create().build();
         try {
             HttpResponse response = httpClient.execute(requestBase);
@@ -134,7 +133,7 @@ public class WeixiaoBao {
             if (HttpStatus.SC_OK != statusCode) {
                 throw new RuntimeException("请求出错");
             }
-            return response;
+            return EntityUtils.toString(response.getEntity());
         } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException(e);
